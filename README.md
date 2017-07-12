@@ -7,8 +7,8 @@
 ### 最终效果如下， 绿色框中即为截图的画面，长按可以移动。
 ![](https://d26dzxoao6i3hh.cloudfront.net/items/382V1S1q1B370V3t0G2L/C35987EE9EA0C8E00004B4848ACB9213.jpg)
 
-### 源代码地址:[Crop sample buffer]()
-### 博客地址:[Crop sample buffer]()
+### 源代码地址:[Crop sample buffer](https://github.com/ChengyangLi/Crop-sample-buffer)
+### 博客地址:[Crop sample buffer](https://chengyangli.github.io/2017/07/12/cropSampleBuffer/)
 ### 简书地址:[Crop sample buffer](http://www.jianshu.com/p/ac79a80f1af2)
 
 ## 基本配置
