@@ -115,6 +115,65 @@ int g_height_size = 200;
 
 #pragma mark ------------------AVCaptureVideoDataOutputSampleBufferDelegate--------------------------------
 // Called whenever an AVCaptureVideoDataOutput instance outputs a new video frame. 每产生一帧视频帧时调用一次
+// software crop
+- (CMSampleBufferRef)cropSampleBufferBySoftware:(CMSampleBufferRef)sampleBuffer {
+    OSStatus status;
+    
+    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    // Lock the image buffer
+    CVPixelBufferLockBaseAddress(imageBuffer,0);
+    // Get information about the image
+    uint8_t *baseAddress    = (uint8_t *)CVPixelBufferGetBaseAddress(imageBuffer);
+    size_t bytesPerRow      = CVPixelBufferGetBytesPerRow(imageBuffer);
+    size_t width            = CVPixelBufferGetWidth(imageBuffer);
+    size_t height           = CVPixelBufferGetHeight(imageBuffer);
+    NSInteger bytesPerPixel =  bytesPerRow/width;
+    
+    //    NSLog(@"demon pix first : %zu - %zu",width, height);
+    
+    CVPixelBufferRef pixbuffer;
+    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
+                             [NSNumber numberWithBool:YES], kCVPixelBufferCGImageCompatibilityKey,
+                             [NSNumber numberWithBool:YES], kCVPixelBufferCGBitmapContextCompatibilityKey,
+                             [NSNumber numberWithInt:g_width_size], kCVPixelBufferWidthKey,
+                             [NSNumber numberWithInt:g_height_size], kCVPixelBufferHeightKey,
+                             nil];
+    
+    int cropX = (int)(currentResolutionW / kScreenWidth   *  self.cropView.frame.origin.x);
+    int cropY = (int)(currentResolutionH / kScreenHeight  *  self.cropView.frame.origin.y);
+    
+    if (cropX % 2 != 0) cropX += 1;
+    NSInteger baseAddressStart = cropY*bytesPerRow+bytesPerPixel*cropX;
+    status = CVPixelBufferCreateWithBytes(kCFAllocatorDefault, g_width_size, g_height_size, kCVPixelFormatType_32BGRA, &baseAddress[baseAddressStart], bytesPerRow, NULL, NULL, (CFDictionaryRef)options, &pixbuffer);
+    if (status != 0) {
+        log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CVPixelBufferCreateWithBytes error %d",(int)status);
+        return NULL;
+    }
+    CVPixelBufferUnlockBaseAddress(imageBuffer,0);
+    
+    CMSampleTimingInfo sampleTime = {
+        .duration               = CMSampleBufferGetDuration(sampleBuffer),
+        .presentationTimeStamp  = CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
+        .decodeTimeStamp        = CMSampleBufferGetDecodeTimeStamp(sampleBuffer)
+    };
+    //
+    CMVideoFormatDescriptionRef videoInfo = NULL;
+    status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, pixbuffer, &videoInfo);
+    if (status != 0) log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMVideoFormatDescriptionCreateForImageBuffer error %d",(int)status);
+    
+    
+    
+    CMSampleBufferRef cropBuffer;
+    status = CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, pixbuffer, true, NULL, NULL, videoInfo, &sampleTime, &cropBuffer);
+    if (status != 0) log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMSampleBufferCreateForImageBuffer error %d",(int)status);
+    
+    CFRelease(videoInfo);
+    CVPixelBufferRelease(pixbuffer);
+    
+    return cropBuffer;
+}
+
+
 - (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     CGRect cropRect                     = CGRectMake(self.cropView.frame.origin.x, self.cropView.frame.origin.y, g_width_size, g_height_size);
     CMSampleBufferRef cropSampleBuffer  = [self cropSampleBuffer:sampleBuffer withCropRect:cropRect];
