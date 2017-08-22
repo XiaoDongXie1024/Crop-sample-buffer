@@ -5,7 +5,7 @@
 ### 原理：由于需要截取相机捕获整个画面其中一部分，所以也就必须拿到那一部分画面的数据，又因为相机AVCaptureVideoDataOutputSampleBufferDelegate中的sampleBuffer为系统私有的数据结构不可直接操作，所以需要将其转换成可以切割的数据结构再进行切割，网上有种思路说将sampleBuffer间接转换为UIImage再对图片切割，这种思路繁琐且性能低，本例将sampleBuffer转换为CoreImage中的CIImage,性能相对较高且降低代码繁琐度。
 
 ### 最终效果如下， 绿色框中即为截图的画面，长按可以移动。
-![](https://d26dzxoao6i3hh.cloudfront.net/items/382V1S1q1B370V3t0G2L/C35987EE9EA0C8E00004B4848ACB9213.jpg)
+![C4B33930D868D682D1424D346D5B596B.jpg](http://upload-images.jianshu.io/upload_images/5086522-544d651b2a8871c0.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 ### 源代码地址:[Crop sample buffer](https://github.com/ChengyangLi/Crop-sample-buffer)
 ### 博客地址:[Crop sample buffer](https://chengyangli.github.io/2017/07/12/cropSampleBuffer/)
