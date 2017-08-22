@@ -12,9 +12,9 @@
 
 // 本文中注释为Log4cplus 代码，如果你的机器有可以打开注释，如果没有可以自行替换为NSLog获取一些信息
 
-// 本文具体解析请参考：  GitHub :
-//                   博客    :
-//                   简书    :
+// 本文具体解析请参考：  GitHub : https://github.com/ChengyangLi/Crop-sample-buffer
+//                   博客    : https://chengyangli.github.io/2017/07/12/cropSampleBuffer/
+//                   简书    : http://www.jianshu.com/p/ac79a80f1af2
 
 /*************************************************************************************************************************************/
 
