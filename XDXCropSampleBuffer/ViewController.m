@@ -25,13 +25,13 @@
 #define kScreenWidth [UIScreen mainScreen].bounds.size.width
 #define kScreenHeight [UIScreen mainScreen].bounds.size.height
 
-#define currentResolutionW 1280
-#define currentResolutionH 720
-#define currentResolution AVCaptureSessionPreset1280x720
+#define currentResolutionW 1920
+#define currentResolutionH 1080
+#define currentResolution AVCaptureSessionPreset1920x1080
 
 // 截取cropView的大小
-int g_width_size  = 200;
-int g_height_size = 200;
+int g_width_size  = 1280;
+int g_height_size = 720;
 
 @interface ViewController ()<AVCaptureVideoDataOutputSampleBufferDelegate>
 {
@@ -40,6 +40,7 @@ int g_height_size = 200;
 @property (nonatomic, strong) AVCaptureSession              *captureSession;
 @property (nonatomic, strong) AVCaptureVideoPreviewLayer    *captureVideoPreviewLayer;
 @property (nonatomic, strong) XDXCropView                   *cropView;
+@property (nonatomic, assign) BOOL                          isOpenGPU;
 
 @end
 
@@ -48,39 +49,44 @@ int g_height_size = 200;
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    // 设置始终横屏
+    [self setScreenCross];
+    
+    // 初始化相机Preview相关参数
     [self initCapture];
     
-    self.cropView                 = [[XDXCropView alloc] initWithFrame:CGRectMake(0, 0, g_width_size, g_height_size)];
-    self.cropView.center          = self.view.center;
+    // 初始化CropView的参数
+    /*  初始化CropView的参数
+        注意：本Demo中如果设置4K需要手机硬件设备的支持，即iPhone 6s以上才支持，使用GPU进行切割如果是4K画面切2K画面，目前尚存在问题，亲测只能维持5分钟开始严重掉帧，博客里有详细介绍原因，这里不过多说明。
+     */
+    self.isOpenGPU = NO;
+    self.cropView = [[XDXCropView alloc] initWithOpen4K:NO OpenGpu:self.isOpenGPU cropWidth:g_width_size cropHeight:g_height_size screenResolutionW:currentResolutionW screenResolutionH:currentResolutionH];
+    [self.cropView isEnableCrop:YES session:_captureSession captureLayer:_captureVideoPreviewLayer mainView:self.view];
+//    self.cropView.center          = self.view.center;
     self.cropView.backgroundColor = [UIColor clearColor];
-    [self.view  addSubview:_cropView];
     [self.view  bringSubviewToFront:_cropView];
     
     UILongPressGestureRecognizer *pressGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(longPressed:)];
     [self.view addGestureRecognizer:pressGesture];
 }
 
+
 - (void)longPressed:(UITapGestureRecognizer *)recognizer {
-    CGPoint currentPoint   = [recognizer locationInView:recognizer.view];
-    CGFloat currentPointX  = currentPoint.x;
-    CGFloat currentPointY  = currentPoint.y;
-    
-    CGFloat cropViewWidth  = g_width_size  / 2;
-    CGFloat cropViewHeight = g_height_size / 2;
-    
-    if (currentPointX < cropViewWidth / 2) {
-        currentPointX = cropViewWidth / 2;
-    }else if(currentPointX > kScreenWidth - cropViewWidth / 2) {
-        currentPointX = kScreenWidth - cropViewWidth / 2;
+    CGPoint currentPoint = [recognizer locationInView:recognizer.view];
+    [self.cropView longPressedWithCurrentPoint:currentPoint
+                                     isOpenGpu:self.isOpenGPU];
+}
+
+- (void)setScreenCross {
+    if([[UIDevice currentDevice] respondsToSelector:@selector(setOrientation:)]) {
+        SEL selector = NSSelectorFromString(@"setOrientation:");
+        NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:[UIDevice instanceMethodSignatureForSelector:selector]];
+        [invocation setSelector:selector];
+        [invocation setTarget:[UIDevice currentDevice]];
+        int val = UIInterfaceOrientationLandscapeLeft;//横屏
+        [invocation setArgument:&val atIndex:2];
+        [invocation invoke];
     }
-    
-    if (currentPointY < cropViewHeight / 2) {
-        currentPointY = cropViewHeight / 2;
-    }else if (currentPointY > kScreenHeight - cropViewHeight / 2) {
-        currentPointY = kScreenHeight - cropViewHeight / 2;
-    }
-    
-    self.cropView.center = CGPointMake(currentPointX, currentPointY);
 }
 
 - (void)initCapture
@@ -103,10 +109,17 @@ int g_height_size = 200;
     
     
     self.captureSession = [[AVCaptureSession alloc] init];
-    NSString *preset    = 0;
-    if (!preset) preset = AVCaptureSessionPresetMedium;
+    NSString *preset;
     
-    self.captureSession.sessionPreset = preset;
+#warning 注意，iPhone 6s以上设备可以设置为2K，若测试设备为6S以下则需要降低分辨率，但本APP中只支持16:9的分辨率
+    if (!preset) preset = AVCaptureSessionPreset1920x1080;
+    
+    if ([_captureSession canSetSessionPreset:preset]) {
+        self.captureSession.sessionPreset = preset;
+    }else {
+        self.captureSession.sessionPreset = AVCaptureSessionPresetHigh;
+    }
+    
     if ([self.captureSession canAddInput:captureInput]) {
         [self.captureSession addInput:captureInput];
     }
@@ -119,165 +132,31 @@ int g_height_size = 200;
         self.captureVideoPreviewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
     }
     
-    self.captureVideoPreviewLayer.frame         = self.view.bounds;
+    self.captureVideoPreviewLayer.frame         = CGRectMake(0, 0, kScreenWidth, kScreenHeight);
     self.captureVideoPreviewLayer.videoGravity  = AVLayerVideoGravityResizeAspectFill;
+    if([[self.captureVideoPreviewLayer connection] isVideoOrientationSupported])
+    {
+        [self.captureVideoPreviewLayer.connection setVideoOrientation:AVCaptureVideoOrientationLandscapeRight];
+    }
+
     [self.view.layer     addSublayer:self.captureVideoPreviewLayer];
     [self.captureSession startRunning];
 }
 
 #pragma mark ------------------AVCaptureVideoDataOutputSampleBufferDelegate--------------------------------
+// Called whenever an AVCaptureVideoDataOutput instance outputs a new video frame. 每产生一帧视频帧时调用一次
 - (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     CMSampleBufferRef cropSampleBuffer;
     
 #warning 两种切割方式任选其一，GPU切割性能较好，CPU切割取决于设备，一般时间长会掉帧。
+    if (self.isOpenGPU) {
+         cropSampleBuffer = [self.cropView cropSampleBufferByHardware:sampleBuffer];
+    }else {
+         cropSampleBuffer = [self.cropView cropSampleBufferBySoftware:sampleBuffer];
+    }
     
-    // CPU crop
-    // cropSampleBuffer = [self cropSampleBufferBySoftware:sampleBuffer];
-    // GPU crop
-    cropSampleBuffer = [self cropSampleBufferByHardware:sampleBuffer];
- 
+    // 使用完后必须显式release，不在iOS自动回收范围
     CFRelease(cropSampleBuffer);
-}
-
-// Called whenever an AVCaptureVideoDataOutput instance outputs a new video frame. 每产生一帧视频帧时调用一次
-// software crop
-- (CMSampleBufferRef)cropSampleBufferBySoftware:(CMSampleBufferRef)sampleBuffer {
-    OSStatus status;
-    
-    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-    // Lock the image buffer
-    CVPixelBufferLockBaseAddress(imageBuffer,0);
-    // Get information about the image
-    uint8_t *baseAddress    = (uint8_t *)CVPixelBufferGetBaseAddress(imageBuffer);
-    size_t bytesPerRow      = CVPixelBufferGetBytesPerRow(imageBuffer);
-    size_t width            = CVPixelBufferGetWidth(imageBuffer);
-    size_t height           = CVPixelBufferGetHeight(imageBuffer);
-    NSInteger bytesPerPixel =  bytesPerRow/width;
-    
-    //    NSLog(@"demon pix first : %zu - %zu",width, height);
-    
-    CVPixelBufferRef pixbuffer;
-    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
-                             [NSNumber numberWithBool:YES], kCVPixelBufferCGImageCompatibilityKey,
-                             [NSNumber numberWithBool:YES], kCVPixelBufferCGBitmapContextCompatibilityKey,
-                             [NSNumber numberWithInt:g_width_size], kCVPixelBufferWidthKey,
-                             [NSNumber numberWithInt:g_height_size], kCVPixelBufferHeightKey,
-                             nil];
-    
-    int cropX = (int)(currentResolutionW / kScreenWidth   *  self.cropView.frame.origin.x);
-    int cropY = (int)(currentResolutionH / kScreenHeight  *  self.cropView.frame.origin.y);
-    
-    if (cropX % 2 != 0) cropX += 1;
-    NSInteger baseAddressStart = cropY*bytesPerRow+bytesPerPixel*cropX;
-    status = CVPixelBufferCreateWithBytes(kCFAllocatorDefault, g_width_size, g_height_size, kCVPixelFormatType_32BGRA, &baseAddress[baseAddressStart], bytesPerRow, NULL, NULL, (__bridge CFDictionaryRef)options, &pixbuffer);
-    if (status != 0) {
-        // log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CVPixelBufferCreateWithBytes error %d",(int)status);
-        return NULL;
-    }
-    CVPixelBufferUnlockBaseAddress(imageBuffer,0);
-    
-    CMSampleTimingInfo sampleTime = {
-        .duration               = CMSampleBufferGetDuration(sampleBuffer),
-        .presentationTimeStamp  = CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
-        .decodeTimeStamp        = CMSampleBufferGetDecodeTimeStamp(sampleBuffer)
-    };
-    //
-    CMVideoFormatDescriptionRef videoInfo = NULL;
-    status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, pixbuffer, &videoInfo);
-    if (status != 0)  {
-        // log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMVideoFormatDescriptionCreateForImageBuffer error %d",(int)status);
-    }
-    
-    
-    CMSampleBufferRef cropBuffer;
-    status = CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, pixbuffer, true, NULL, NULL, videoInfo, &sampleTime, &cropBuffer);
-    if (status != 0) {
-//        log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMSampleBufferCreateForImageBuffer error %d",(int)status);
-    }
-    
-    CFRelease(videoInfo);
-    CVPixelBufferRelease(pixbuffer);
-    
-    return cropBuffer;
-}
-
-// crop sample buffer，
-- (CMSampleBufferRef)cropSampleBufferByHardware:(CMSampleBufferRef)buffer {
-    // a CMSampleBuffer's CVImageBuffer of media data.
-    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(buffer);
-    size_t height = CVPixelBufferGetHeight(imageBuffer);
-    size_t width  = CVPixelBufferGetWidth(imageBuffer);
-    // log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMSampleBufferRef origin pix width: %zu - height : %zu",width, height);
-    
-    CGFloat cropViewX  = currentResolutionW / kScreenWidth  * self.cropView.frame.origin.x;
-    // CIImage base point is locate left-bottom so need to convert
-    CGFloat cropViewY  = currentResolutionH / kScreenHeight * (kScreenHeight - self.cropView.frame.origin.y -  self.cropView.frame.size.height);
-    
-    CGRect cropRect = CGRectMake(cropViewX, cropViewY, g_width_size, g_height_size);
-    // log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "dropRect x: %f - y : %f - width : %zu - height : %zu", cropViewX, cropViewY, width, height);
-
-    
-    /*
-     First, to render to a texture, you need an image that is compatible with the OpenGL texture cache. Images that were created with the camera API are already compatible and you can immediately map them for inputs. Suppose you want to create an image to render on and later read out for some other processing though. You have to have create the image with a special property. The attributes for the image must have kCVPixelBufferIOSurfacePropertiesKey as one of the keys to the dictionary.
-        如果要进行页面渲染，需要一个和OpenGL缓冲兼容的图像。用相机API创建的图像已经兼容，您可以马上映射他们进行输入。假设你从已有画面中截取一个新的画面，用作其他处理，你必须创建一种特殊的属性用来创建图像。对于图像的属性必须有kCVPixelBufferIOSurfacePropertiesKey 作为字典的Key.因此以下步骤不可省略
-     
-     */
-    OSStatus status;
-    CVPixelBufferRef pixelBuffer;
-    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
-                             //                             [NSNumber numberWithBool:YES],             kCVPixelBufferOpenGLCompatibilityKey,
-                             //                             [NSNumber numberWithBool:YES],             kCVPixelBufferOpenGLESCompatibilityKey,
-                             //                             [NSNumber numberWithBool:YES],             kCVPixelBufferCGImageCompatibilityKey,
-                             //                             [NSNumber numberWithBool:YES],             kCVPixelBufferCGBitmapContextCompatibilityKey,
-                             [NSNumber numberWithInt:g_width_size],     kCVPixelBufferWidthKey,
-                             [NSNumber numberWithInt:g_height_size],    kCVPixelBufferHeightKey,
-                             
-                             nil];
-    status = CVPixelBufferCreate(kCFAllocatorSystemDefault, g_width_size, g_height_size, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, (__bridge CFDictionaryRef)options, &pixelBuffer);
-    
-    CVPixelBufferLockBaseAddress(pixelBuffer, 0);
-    CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
-    //    ciImage          = [ciImage imageByCroppingToRect:cropRect];
-    
-    
-    if (_ciContext == nil) {
-        EAGLContext *eaglContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
-        _ciContext = [CIContext contextWithEAGLContext:eaglContext options:@{kCIContextWorkingColorSpace : [NSNull null]}];
-#warning if project is MRC, Must to do it,如果是MRC代码必须手动retain ciContext对象，因为初始化中并没有retain它，不然渲染将报错找不到ciContext对象的内存地址。
-        // [eaglContext release];
-        // [ciContext retain];
-    }
-    
-    // In OS X 10.11.3 and iOS 9.3 and later
-    //    CGColorSpaceRef rgbColorSpace = CGColorSpaceCreateDeviceRGB();
-    //    [ciContext render:ciImage toCVPixelBuffer:pixelBuffer];
-    // 两种渲染方式，博客里有介绍，亲测这种方案较好
-    [_ciContext render:ciImage toCVPixelBuffer:pixelBuffer bounds:cropRect colorSpace:nil];
-    
-    CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
-    CMSampleTimingInfo sampleTime = {
-        .duration               = CMSampleBufferGetDuration(buffer),
-        .presentationTimeStamp  = CMSampleBufferGetPresentationTimeStamp(buffer),
-        .decodeTimeStamp        = CMSampleBufferGetDecodeTimeStamp(buffer)
-    };
-    
-    CMVideoFormatDescriptionRef videoInfo = NULL;
-    status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, pixelBuffer, &videoInfo);
-    if (status != 0){
-//        log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMVideoFormatDescriptionCreateForImageBuffer error %d",(int)status);
-    }
-    
-    CMSampleBufferRef cropBuffer;
-    status = CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, pixelBuffer, true, NULL, NULL, videoInfo, &sampleTime, &cropBuffer);
-    if (status != 0) {
-//        log4cplus_debug("AVCaptureVideoDataOutputSampleBufferDelegate", "CMSampleBufferCreateForImageBuffer error %d",(int)status);
-    }
-    
-    CFRelease(videoInfo);
-    CFRelease(pixelBuffer);
-    
-    return cropBuffer;
-
 }
 
 @end
