@@ -7,9 +7,10 @@
 ### 最终效果如下， 绿色框中即为截图的画面，长按可以移动。
 ![绿色框为截取部分](http://upload-images.jianshu.io/upload_images/5086522-8dcd2cde5f0b23a3.PNG?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-### 源代码地址:[Crop sample buffer](https://github.com/ChengyangLi/Crop-sample-buffer)
-### 博客地址:[Crop sample buffer](https://chengyangli.github.io/2017/07/12/cropSampleBuffer/)
-### 简书地址:[Crop sample buffer](http://www.jianshu.com/p/ac79a80f1af2)
+#### GitHub地址(附代码) : [Crop sample buffer](https://github.com/ChengyangLi/Crop-sample-buffer)
+#### 简书地址     : [Crop sample buffer](http://www.jianshu.com/p/ac79a80f1af2)
+#### 博客地址     : [Crop sample buffer](https://chengyangli.github.io/2017/07/12/cropSampleBuffer/)
+#### 掘金地址     : [Crop sample buffer](https://juejin.im/post/5a8fe2a66fb9a063317c6828)
 
 ## 注意：使用ARC与MRC下代码有所区别，已经在项目中标注好，主要为管理全局的CIContext对象，它在初始化的方法中编译器没有对其进行retain,所以，调用会报错。
 ![cicontextError](http://upload-images.jianshu.io/upload_images/5086522-5f510e448af32d4d.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
